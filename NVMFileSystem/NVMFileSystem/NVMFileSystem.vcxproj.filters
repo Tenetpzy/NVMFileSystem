@@ -29,5 +29,8 @@
     <ClInclude Include="file_struct.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CommonUtil.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
