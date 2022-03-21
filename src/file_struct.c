@@ -1,4 +1,5 @@
 #include "file_struct.h"
+#include <stddef.h>
 
 struct fileset {
 	uint64_t bitset;
@@ -6,7 +7,7 @@ struct fileset {
 };
 
 struct fd_array {
-	struct fileset fileset[ROUND_DOWN(L1FDSIZE, 64)]
+	struct fileset fileset[ROUND_DOWN(L1FDSIZE, 64)];
 };
 
 static struct fd_array** find_fd_array(struct file_struct* self, int L1Index) {
