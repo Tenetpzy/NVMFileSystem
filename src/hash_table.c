@@ -1,6 +1,5 @@
 #include "hash_table.h"
-#include <stdlib.h>
-#include <string.h>
+#include <malloc.h>
 
 typedef uint8_t bitset_t;
 
@@ -19,7 +18,13 @@ struct hash_bucket_node
 struct hash_bucket_node* alloc_bucket_node()
 {
     // 之后可能不用malloc，自己管理缓存池
-    return malloc(sizeof(struct hash_bucket_node));
+    return memalign(CACHE_LINE_SIZE, sizeof(struct hash_bucket_node));
+}
+
+void free_bucket_node(struct hash_bucket_node* self)
+{
+    // 之后可能不用malloc，此处也不调free
+    free(self);
 }
 
 void bucket_node_init(struct hash_bucket_node *self)
@@ -85,12 +90,40 @@ static inline void hash_bucket_insert_node(struct hash_bucket *self, struct hash
     self->head = node;
 }
 
+void free_hash_bucket(struct hash_bucket *self)
+{
+    for (;;)
+    {
+        struct hash_bucket_node *node = self->head;
+        if (node == NULL)
+            break;
+        self->head = node->next;
+        free_bucket_node(node);
+    }
+}
+
 void hash_table_init(struct hash_table *self, int (*cmp)(void *, void *), void *(*getkey)(void *), bucket_index_t (*hash_fun)(void *))
 {
-    memset(self->bucket_list, 0, sizeof(self->bucket_list));
     self->compare_hash_key = cmp;
     self->get_hash_key = getkey;
     self->hash = hash_fun;
+    for (int i = 0; i < HASH_TABLE_SIZE; ++i)
+    {
+        self->bucket_list[i].head = NULL;
+        pthread_mutex_init(&self->mtx[i], NULL);
+    }
+}
+
+int hash_table_lock_bucket(struct hash_table *self, int index)
+{
+    int ret = pthread_mutex_lock(&self->mtx[index]);
+    return ret == 0 ? 0 : bucket_lock_error;
+}
+
+int hash_table_unlock_bucket(struct hash_table *self, int index)
+{
+    int ret = pthread_mutex_unlock(&self->mtx[index]);
+    return ret == 0 ? 0 : bucket_unlock_error;
 }
 
 struct hash_bucket *hash_table_get_bucket(struct hash_table *self, void *key)

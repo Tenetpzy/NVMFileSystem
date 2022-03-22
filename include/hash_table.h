@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <pthread.h>
 
 #define CACHE_LINE_SIZE 64
 #define ENTRY_NUMBER 6
@@ -22,6 +23,7 @@ struct hash_table
 	 * 保护bucket的锁
 	 * 可以一个bucket一个锁，也可以相邻多个bucket一个锁
 	 */
+	pthread_mutex_t mtx[HASH_TABLE_SIZE];
 
 	int (*compare_hash_key)(void *key1, void *key2);
 	void *(*get_hash_key)(void *value);
@@ -30,7 +32,7 @@ struct hash_table
 
 enum hash_operation_exceptions
 {
-	alloc_bucket_node_fail = 1
+	alloc_bucket_node_fail = 1, bucket_lock_error, bucket_unlock_error
 };
 
 void hash_table_init(struct hash_table *self, int (*cmp)(void *, void *), void *(*getkey)(void *), bucket_index_t (*hash_fun)(void *));
@@ -47,3 +49,8 @@ int hash_bucket_insert_value(struct hash_bucket *self, void *value);
 
 // 删除桶结点中pentry指向的项
 void hash_bucket_node_delete_entry(unsigned long pentry);
+
+// 锁住下标为index的桶
+int hash_table_lock_bucket(struct hash_table *self, int index);
+
+int hash_table_unlock_bucket(struct hash_table *self, int index);
