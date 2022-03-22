@@ -20,7 +20,9 @@ endif()
 FILE(GLOB Sources "src/*.c")
 FILE(GLOB Headers "include/*.h")
 
-add_executable(NVMFileSystem ${Sources} ${Headers})
+add_library(NVMFileSystem STATIC ${Sources} ${Headers})
 
 target_include_directories(NVMFileSystem PRIVATE include)
 target_link_libraries(NVMFileSystem PRIVATE Threads::Threads)
+
+add_subdirectory(tests)
