@@ -266,5 +266,4 @@ void file_struct_destroy(struct file_struct *self)
             }
         }
     }
-    free(self);
 }

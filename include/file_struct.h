@@ -40,5 +40,5 @@ void file_struct_free_fd_slot(struct file_struct *self, int fd);
 //根据fd获取file**
 struct file **file_struct_access_fd_slot(struct file_struct *self, int fd);
 
-//释放file_struct资源
+//释放file_struct申请的资源
 void file_struct_destroy(struct file_struct *self);
