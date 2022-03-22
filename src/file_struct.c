@@ -3,6 +3,12 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stdatomic.h>
+
+typedef _Atomic(uint64_t) file_struct_bitset_t;
+typedef _Atomic(struct fd_array *) atomic_fd_array;
+
+struct file;
 
 struct fileset
 {
@@ -14,6 +20,16 @@ struct fd_array
 {
     struct fileset fileset[L2FDARRAYSIZE];
     atomic_int_fast32_t counter;
+};
+struct fd_index_array
+{
+    file_struct_bitset_t bitset;
+    atomic_fd_array fd_array[64];
+};
+
+struct file_struct
+{
+    struct fd_index_array fd_index_array[L1FDARRAYSIZE];
 };
 
 #pragma region PRIVATE
@@ -147,7 +163,7 @@ static atomic_fd_array fd_array_new()
     return ret;
 }
 
-static void fd_array_destory(struct fd_array *self)
+static void fd_array_free(struct fd_array *self)
 {
     //这里没有释放所有资源，因为file 还没有定义
     if(self){
@@ -158,8 +174,9 @@ static void fd_array_destory(struct fd_array *self)
 
 #pragma endregion END PRIVATE
 
-void file_struct_init(struct file_struct *self)
+struct file_struct *file_struct_new()
 {
+    struct file_struct *self = malloc(sizeof(struct file_struct));
     for (int i = 0; i < L1FDARRAYSIZE; i++)
     {
         for (int j = 0; j < 64; j++)
@@ -168,6 +185,7 @@ void file_struct_init(struct file_struct *self)
         }
         self->fd_index_array[i].bitset = 0;
     }
+    return self;
 }
 
 int file_struct_alloc_fd_slot(struct file_struct *self)
@@ -254,7 +272,7 @@ struct file **file_struct_access_fd_slot(struct file_struct *self, int fd)
     return get_file_ptr(*tmp, L2Index);
 }
 
-void file_struct_destroy(struct file_struct *self)
+void file_struct_free(struct file_struct *self)
 {
     if (self)
     {
@@ -262,8 +280,9 @@ void file_struct_destroy(struct file_struct *self)
         {
             for (int j = 0; j < 64; j++)
             {
-                fd_array_destory(self->fd_index_array[i].fd_array[j]);
+                fd_array_free(self->fd_index_array[i].fd_array[j]);
             }
         }
     }
+    free(self);
 }

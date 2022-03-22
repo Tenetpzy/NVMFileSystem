@@ -15,6 +15,7 @@ FILE(GLOB Sources "*.cc")
 
 add_executable(Tests ${Sources})
 target_link_libraries(Tests gtest_main NVMFileSystem)
+target_include_directories(Tests PRIVATE "../include")
 
 include(GoogleTest)
 gtest_discover_tests(Tests)

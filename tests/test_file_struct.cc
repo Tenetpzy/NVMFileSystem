@@ -10,14 +10,12 @@ class file_struct_Test : public ::testing::Test
 protected:
     void SetUp() override
     {
-        pfs = &fs;
-        file_struct_init(&fs);
+        pfs = file_struct_new();
     }
     void TearDown() override
     {
-        file_struct_destroy(&fs);
+        file_struct_free(pfs);
     }
-    struct file_struct fs;
     struct file_struct *pfs;
 };
 
