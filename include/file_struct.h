@@ -1,8 +1,8 @@
 #pragma once
 #include <pthread.h>
-#include <stdint.h>
+#include "Common.h"
+#include "Util.h"
 
-#include "CommonUtil.h"
 #define L1FDSIZE 256
 #define L2FDSIZE 256
 #define MAXFDSIZE (L1FDSIZE * L2FDSIZE)
