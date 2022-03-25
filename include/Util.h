@@ -7,3 +7,5 @@
 #define RIGHT_MOST_ZERO_LL(ullval) __builtin_ctzll(~(unsigned long long)(ullval))
 
 #define RIGHT_MOST_ZERO(val) __builtin_ctz(~(unsigned int)(val))
+
+#define IS_NULL_PTR(ptr) (NULL == (ptr))
