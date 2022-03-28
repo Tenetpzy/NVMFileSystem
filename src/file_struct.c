@@ -73,14 +73,10 @@ static void file_struct_incre_fd_array_count(struct file_struct *self, int fd_ar
         atomic_compare_exchange_strong(&self->fd_index_array[idx].bitset, &exp_bitset, set_bitset);
         //强保证：如果fd_array没有满，其bit一定unset
         //再次测试，没有满，去掉其bit
-        while (!fd_array_isfull(fd_array)) {
+        if (!fd_array_isfull(fd_array)) {
             exp_bitset = self->fd_index_array[idx].bitset;
-            if ((exp_bitset & idxbit) == 0) {
-                break;
-            }
-            set_bitset = exp_bitset & (~idxbit);
-            if (atomic_compare_exchange_strong(&self->fd_index_array[idx].bitset, &exp_bitset, set_bitset)) {
-                break;
+            if ((exp_bitset & idxbit) != 0) {
+                atomic_fetch_and(&self->fd_index_array[idx].bitset, ~idxbit);
             }
         }
     }
@@ -92,19 +88,9 @@ static void file_struct_decre_fd_array_count(struct file_struct *self, int fd_ar
     assert(fd_array->counter >= 0);
     int idx = fd_array_idx >> 6;
     uint64_t idxbit = 1ULL << (fd_array_idx & 63);
-    file_struct_bitset_t exp_bitset;
-    file_struct_bitset_t set_bitset;
+
     //去除bit
-    while (1) {
-        exp_bitset = self->fd_index_array[idx].bitset;
-        set_bitset = exp_bitset & (~idxbit);
-        if (exp_bitset == set_bitset) {
-            break;
-        }
-        if (atomic_compare_exchange_weak(&self->fd_index_array[idx].bitset, &exp_bitset, set_bitset)) {
-            break;
-        }
-    }
+    atomic_fetch_and(&self->fd_index_array[idx].bitset, ~idxbit);
 }
 
 static int file_struct_try_alloc_fd(struct file_struct *self, int fd_array_idx, int fileset_idx) {
