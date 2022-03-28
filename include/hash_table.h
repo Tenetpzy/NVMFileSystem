@@ -39,7 +39,7 @@ struct hash_table {
     struct hash_table_common_operation *op;
 };
 
-enum hash_operation_exceptions { alloc_bucket_node_fail = 1 };
+enum hash_operation_exceptions { alloc_bucket_node_fail = 1, insert_already_exist };
 
 void hash_table_init(struct hash_table *self, struct hash_table_common_operation *op);
 

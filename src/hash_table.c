@@ -95,7 +95,7 @@ void hash_table_lock_bucket(struct hash_table *self, size_t index) {
     lock_bitset_t not_set_mask = ~set_mask;
     for (;;) {
         lock_bitset_t expect = self->mtx[idx];
-        lock_bitset_t target = self->mtx[idx];
+        lock_bitset_t target = expect;
         expect &= not_set_mask;
         target |= set_mask;
         if (atomic_compare_exchange_weak(&self->mtx[idx], &expect, target)) break;
