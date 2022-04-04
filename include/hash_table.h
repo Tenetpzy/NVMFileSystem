@@ -1,25 +1,6 @@
 #pragma once
-#include <stdatomic.h>
 #include <stddef.h>
 #include "Util.h"
-
-typedef atomic_uchar lock_bitset_atomic_t;
-typedef unsigned char lock_bitset_t;
-
-#define CACHE_LINE_SIZE 64
-#define ENTRY_NUMBER 7
-
-// maybe a larger prime number...
-#define HASH_TABLE_BUCKET_NUMBER 101
-
-#define LOCK_BITSET_SIZE (sizeof(lock_bitset_atomic_t) * 8)
-#define LOCK_BITSET_NUMBER ROUND_UP(HASH_TABLE_BUCKET_NUMBER, LOCK_BITSET_SIZE)
-
-struct hash_bucket_node;
-
-struct hash_bucket {
-    struct hash_bucket_node *head;
-};
 
 struct hash_table_common_operation {
     int (*compare_hash_key)(void *key1, void *key2);
@@ -28,38 +9,39 @@ struct hash_table_common_operation {
 };
 
 struct hash_table {
-    struct hash_bucket bucket_list[HASH_TABLE_BUCKET_NUMBER];
-
-    /*
-     * 保护bucket的锁
-     * 可以一个bucket一个锁，也可以相邻多个bucket一个锁
-     */
-    lock_bitset_atomic_t mtx[LOCK_BITSET_NUMBER];
-
+    struct hash_bucket_node *bucket_array;
     struct hash_table_common_operation *op;
 };
 
-enum hash_operation_exceptions { alloc_bucket_node_fail = 1, insert_already_exist };
+enum hash_operation_exceptions { alloc_fail = 1, insert_already_exist, remove_not_exist };
 
-void hash_table_init(struct hash_table *self, struct hash_table_common_operation *op);
+int hash_table_init(struct hash_table *self, struct hash_table_common_operation *op);
 
 void hash_table_destroy(struct hash_table *self);
 
-// 获取关键字key在哈希表中的桶下标
-size_t hash_table_get_bucket_index(struct hash_table *self, void *key);
+/* 在hash中查找关键码为key的对象
+ *
+ * 若找到且get_instance不为空
+ * 则在找到的对象上回调get_instance
+ * 
+ * 查找成功返回对象的地址，否则返回NULL
+*/
+void* hash_table_lookup(struct hash_table *self, void *key, void(*get_instance)(void*));
 
-// 在给定桶中查找并返回关键字为key的value，不存在返回NULL
-// 若pvalue非空，将其置为桶中保存value的项的地址
-void *hash_bucket_lookup_value(struct hash_table *self, size_t index, void *key, unsigned long *pvalue);
+/* 在hash表中插入value
+ * 
+ * 若插入成功且get_instance不为空
+ * 则在value指向的对象上回调get_instance
+ * 
+ * 插入成功返回0，否则返回hash_operation_exceptions中的正整数
+*/
+int hash_table_insert(struct hash_table *self, void *value, void(*get_instance)(void*));
 
-// 将value插入桶中（不判断value的key是否对应这个桶）
-// 若pvalue非空，将其置为桶中保存value的项的地址
-int hash_bucket_insert_value(struct hash_table *self, size_t index, void *value, unsigned long *pvalue);
-
-// 删除桶结点中pentry指向的项
-void hash_bucket_node_delete_entry(unsigned long pentry);
-
-// 锁住下标为index的桶
-void hash_table_lock_bucket(struct hash_table *self, size_t index);
-
-void hash_table_unlock_bucket(struct hash_table *self, size_t index);
+/* 移除关键码为key的对象
+ * 
+ * 若存在对象且release_instance不为空
+ * 则在该对象上回调release_instance
+ * 
+ * 移除成功返回0，否则返回hash_operation_exceptions中的正整数
+*/
+int hash_table_remove_use_key(struct hash_table *self, void *key, void(*release_instance)(void*));
