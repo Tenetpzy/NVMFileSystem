@@ -9,3 +9,5 @@
 #define RIGHT_MOST_ZERO(val) __builtin_ctz(~(unsigned int)(val))
 
 #define IS_NULL_PTR(ptr) (NULL == (ptr))
+
+#define COUNT_ONE_LL(ullval) __builtin_popcountll(ullval)

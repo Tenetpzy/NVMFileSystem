@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <atomic>
 #include <mutex>
 #include <random>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 extern "C" {
@@ -94,37 +96,53 @@ TEST_F(file_struct_Test, ConcurrentTest1) {
 }
 
 TEST_F(file_struct_Test, ConcurrentTest2) {
+    const int Test2_Times = 233;
     using namespace std;
     vector<thread> thread_pool_;
     vector<int> fds;
     mutex fds_mutex;
     srand(time(NULL));
-    auto test2 = [&](int n, int seed) {
-        default_random_engine generator(seed);
-        uniform_int_distribution<int> distr(0, n);
-        vector<int> lfds;
-        for (int i = 0; i < n; i++) {
-            lfds.push_back(file_struct_alloc_fd_slot(pfs));
-        }
-        for (int i = 0; i < n; i += 2) {
-            int idx = distr(generator) % lfds.size();
-            int num = lfds[idx];
-            swap(lfds[idx], lfds.back());
-            lfds.pop_back();
-            file_struct_free_fd_slot(pfs, num);
-        }
-        lock_guard<mutex> g(fds_mutex);
-        for (auto x : lfds) fds.push_back(x);
-    };
-    thread_pool_.emplace_back(test2, 5000, 456);
-    thread_pool_.emplace_back(test2, 5000, 75);
-    thread_pool_.emplace_back(test2, 5000, 24245);
-    thread_pool_.emplace_back(test2, 5000, 7572155);
-    for (auto &t : thread_pool_) {
-        if (t.joinable()) {
+    int T = Test2_Times;
+    while (T--) {
+        auto test2 = [&](int n, int seed) {
+            default_random_engine generator(seed);
+            uniform_int_distribution<int> distr(0, n);
+            vector<int> lfds;
+            for (int i = 0; i < n; i++) {
+                lfds.push_back(file_struct_alloc_fd_slot(pfs));
+            }
+            for (int i = 0; i < n; i += 2) {
+                int idx = distr(generator) % lfds.size();
+                int num = lfds[idx];
+                swap(lfds[idx], lfds.back());
+                lfds.pop_back();
+                file_struct_free_fd_slot(pfs, num);
+            }
+            lock_guard<mutex> g(fds_mutex);
+            for (auto x : lfds) {
+                fds.push_back(x);
+            }
+        };
+        thread_pool_.emplace_back(test2, 10000, rand());
+        thread_pool_.emplace_back(test2, 10000, rand());
+        thread_pool_.emplace_back(test2, 10000, rand());
+        thread_pool_.emplace_back(test2, 10000, rand());
+        for (auto &t : thread_pool_) {
             t.join();
         }
+        sort(fds.begin(), fds.end());
+        EXPECT_EQ(unique(fds.begin(), fds.end()), fds.end());
+        // for (auto fd : fds) {
+        //     EXPECT_TRUE(!file_struct_is_fd_slot_empty(pfs, fd));
+        // }
+        unordered_set<int> avai_fds(fds.begin(), fds.end());
+        for (int i = 0; i < MAXFDSIZE; i++) {
+            EXPECT_EQ(!file_struct_is_fd_slot_empty(pfs, i), avai_fds.count(i));
+        }
+        thread_pool_.clear();
+        fds.clear();
+        file_struct_consistency_validation(pfs);
+        file_struct_free(pfs);
+        pfs = file_struct_new();
     }
-    sort(fds.begin(), fds.end());
-    EXPECT_EQ(unique(fds.begin(), fds.end()), fds.end());
 }
