@@ -72,7 +72,7 @@ int hash_table_init(struct hash_table *self, struct hash_table_common_operation 
     self->op = op;
     if (self->bucket_array == NULL)
         return alloc_fail;
-    for (int i = 0; i < BUCKET_ENTRY_NUMBER; ++i)
+    for (int i = 0; i < HASH_TABLE_BUCKET_NUMBER; ++i)
         bucket_node_init(&self->bucket_array[i]);
     return 0;
 }
