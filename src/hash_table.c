@@ -72,7 +72,7 @@ int hash_table_init(struct hash_table *self, struct hash_table_common_operation 
     self->op = op;
     if (self->bucket_array == NULL)
         return alloc_fail;
-    for (int i = 0; i < BUCKET_ENTRY_NUMBER; ++i)
+    for (int i = 0; i < HASH_TABLE_BUCKET_NUMBER; ++i)
         bucket_node_init(&self->bucket_array[i]);
     return 0;
 }
@@ -124,6 +124,7 @@ static void *hash_bucket_lookup_value(struct hash_table *self, size_t index, voi
 {
     void *result = NULL;
     struct hash_bucket_node *node = &self->bucket_array[index];
+
     int entry = -1;
     while (node != NULL)  // 遍历冲突链中所有的BucketNode
     {
@@ -135,6 +136,7 @@ static void *hash_bucket_lookup_value(struct hash_table *self, size_t index, voi
             entry = -1;
             continue;
         }
+
         void *entry_key = self->op->get_hash_key(node->value[entry]);
         if (self->op->compare_hash_key(entry_key, key) == 0)  // 比较key, 返回0表示相等，即找到目标
         {
@@ -185,6 +187,17 @@ void* hash_table_lookup(struct hash_table *self, void *key, void(*get_instance)(
     return result;
 }
 
+void* hash_table_lookup_no_lock(struct hash_table *self, void *key, void(*get_instance)(void*))
+{
+    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+    
+    void *result = hash_bucket_lookup_value(self, index, key, NULL);
+    if (result != NULL && get_instance != NULL)
+        get_instance(result);
+    
+    return result;
+}
+
 int hash_table_insert(struct hash_table *self, void *value, void(*get_instance)(void*))
 {
     void *key = self->op->get_hash_key(value);
@@ -209,6 +222,22 @@ int hash_table_insert(struct hash_table *self, void *value, void(*get_instance)(
     return result;
 }
 
+int hash_table_insert_no_lock(struct hash_table *self, void *value, void(*get_instance)(void*))
+{
+    void *key = self->op->get_hash_key(value);
+    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+
+    void *res = hash_bucket_lookup_value(self, index, key, NULL);
+    if (res != NULL)
+        return insert_already_exist;
+
+    int result = hash_bucket_insert_value(self, index, value, NULL);
+    if (get_instance != NULL && result == 0)
+        get_instance(value);
+
+    return result;
+}
+
 int hash_table_remove_use_key(struct hash_table *self, void *key, void(*release_instance)(void*))
 {
     size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
@@ -230,8 +259,25 @@ int hash_table_remove_use_key(struct hash_table *self, void *key, void(*release_
     return 0;
 }
 
+int hash_table_remove_use_key_no_lock(struct hash_table *self, void *key, void(*release_instance)(void*))
+{
+    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+
+    unsigned long pvalue;
+    void *result = hash_bucket_lookup_value(self, index, key, &pvalue);
+    if (result == NULL)
+        return remove_not_exist;
+
+    bucket_node_clear_entry(pvalue);
+    if (release_instance != NULL)
+        release_instance(result);    
+
+    return 0;
+}
+
 
 // -------------------------------------------------------------------------
+// debug used
 
 size_t hash_table_bucket_count_member(struct hash_table *self, size_t index)
 {

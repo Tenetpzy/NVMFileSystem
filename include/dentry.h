@@ -2,6 +2,7 @@
 
 #include "Common.h"
 #include "spin_lock.h"
+#include "stdatomic.h"
 
 struct inode;
 
@@ -19,8 +20,7 @@ struct dentry_hash_key {
 #define DENTRY_NAME_MAX_LEN 128
 
 struct dentry {
-    unsigned long count;  // dentry引用计数
-    spinlock_t lock;      // 保护dentry的自旋锁
+    atomic_llong ref_count;  // dentry引用计数
 
     struct inode *d_inode;  // 关联到的索引节点
     ino_t d_ino;            // 关联索引节点号
@@ -30,7 +30,6 @@ struct dentry {
     struct dentry_list *fa_sub_list;  // 父目录项的子目录项链表
 
     struct dentry_hash_key hash_key;
-    unsigned long hash_pos_ptr;  // hash表的反向索引，指向hash表中存储它的位置
 
     char name[DENTRY_NAME_MAX_LEN];
 };
@@ -38,4 +37,10 @@ struct dentry {
 void dentry_inc_count(struct dentry*);
 void dentry_dec_count(struct dentry*);
 
-int dentry_insert_hash_table(struct dentry*);
+struct dentry* alloc_dentry();
+void free_dentry(struct dentry* dt);
+
+int dentry_hash_table_init();
+int dentry_hash_table_insert(struct dentry*);
+struct dentry* dentry_hash_table_lookup(struct dentry_hash_key*);
+int dentry_hash_table_remove(struct dentry*);

@@ -27,6 +27,7 @@ void hash_table_destroy(struct hash_table *self);
  * 查找成功返回对象的地址，否则返回NULL
 */
 void* hash_table_lookup(struct hash_table *self, void *key, void(*get_instance)(void*));
+void* hash_table_lookup_no_lock(struct hash_table *self, void *key, void(*get_instance)(void*));
 
 /* 在hash表中插入value
  * 
@@ -36,6 +37,7 @@ void* hash_table_lookup(struct hash_table *self, void *key, void(*get_instance)(
  * 插入成功返回0，否则返回hash_operation_exceptions中的正整数
 */
 int hash_table_insert(struct hash_table *self, void *value, void(*get_instance)(void*));
+int hash_table_insert_no_lock(struct hash_table *self, void *value, void(*get_instance)(void*));
 
 /* 移除关键码为key的对象
  * 
@@ -45,3 +47,4 @@ int hash_table_insert(struct hash_table *self, void *value, void(*get_instance)(
  * 移除成功返回0，否则返回hash_operation_exceptions中的正整数
 */
 int hash_table_remove_use_key(struct hash_table *self, void *key, void(*release_instance)(void*));
+int hash_table_remove_use_key_no_lock(struct hash_table *self, void *key, void(*release_instance)(void*));

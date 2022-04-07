@@ -11,11 +11,10 @@ typedef atomic_bool spinlock_t;
         atomic_init(&(x), SPIN_CLEAR); \
     } while (0)
 
-#define lock_spin(x)                                                  \
-    do {                                                              \
-        _Bool expect = SPIN_CLEAR;                                    \
-        while (atomic_compare_exchange_weak(&(x), &expect, SPIN_SET)) \
-            ;                                                         \
+#define lock_spin(x)                                                   \
+    do {                                                               \
+        _Bool expect = SPIN_CLEAR;                                     \
+        while (atomic_compare_exchange_weak(&(x), &expect, SPIN_SET)); \
     } while (0)
 
 #define unlock_spin(x)                  \
