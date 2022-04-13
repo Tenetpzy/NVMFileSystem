@@ -14,7 +14,7 @@ extern "C" {
 class file_struct_Test : public ::testing::Test {
    protected:
     void SetUp() override { pfs = file_struct_new(); }
-    void TearDown() override { file_struct_free(pfs); }
+    void TearDown() override { file_struct_delete(pfs); }
     struct file_struct *pfs;
 };
 
@@ -142,7 +142,7 @@ TEST_F(file_struct_Test, ConcurrentTest2) {
         thread_pool_.clear();
         fds.clear();
         file_struct_consistency_validation(pfs);
-        file_struct_free(pfs);
+        file_struct_delete(pfs);
         pfs = file_struct_new();
     }
 }
