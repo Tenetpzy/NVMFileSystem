@@ -1,5 +1,4 @@
 #pragma once
-#include <pthread.h>
 #include "Common.h"
 #include "Util.h"
 
@@ -28,7 +27,7 @@ struct file **file_struct_access_fd_slot(struct file_struct *self, int fd);
 int file_struct_is_fd_slot_empty(struct file_struct *self, int fd);
 
 //释放file_struct申请的资源
-void file_struct_free(struct file_struct *self);
+void file_struct_delete(struct file_struct *self);
 
 //检验file_struct一致性
 void file_struct_consistency_validation(struct file_struct *self);

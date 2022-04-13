@@ -11,3 +11,9 @@
 #define IS_NULL_PTR(ptr) (NULL == (ptr))
 
 #define COUNT_ONE_LL(ullval) __builtin_popcountll(ullval)
+
+#define OVERLOAD_1_3_ARG(_1, _2, _3, FUNC_NAME, ...) FUNC_NAME
+
+#define OVERLOAD_1_2_ARG(_1, _2, FUNC_NAME, ...) FUNC_NAME
+
+#define OVERLOAD_0_1_ARG(_1, _2, ...) OVERLOAD_1_2_ARG(NULL, ##__VA_ARGS__, _1, _2)

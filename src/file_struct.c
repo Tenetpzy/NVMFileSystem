@@ -137,7 +137,7 @@ static atomic_fd_array fd_array_new() {
     return ret;
 }
 
-static void fd_array_free(struct fd_array *self) {
+static void fd_array_delete(struct fd_array *self) {
     //这里没有释放所有资源，因为file 还没有定义
     if (self) {
         // TODO destory file*
@@ -173,7 +173,7 @@ int file_struct_alloc_fd_slot(struct file_struct *self) {
             atomic_fd_array new_fd_array = fd_array_new();
             atomic_fd_array expnull = NULL;
             if (!atomic_compare_exchange_strong(fd_array_ptr, &expnull, new_fd_array)) {
-                fd_array_free(new_fd_array);
+                fd_array_delete(new_fd_array);
             }
         }
         for (int i = 0; i < L2FDARRAYSIZE; i++) {
@@ -249,11 +249,11 @@ void file_struct_consistency_validation(struct file_struct *self) {
     }
 }
 
-void file_struct_free(struct file_struct *self) {
+void file_struct_delete(struct file_struct *self) {
     if (self) {
         for (int i = 0; i < L1FDARRAYSIZE; i++) {
             for (int j = 0; j < 64; j++) {
-                fd_array_free(self->fd_index_array[i].fd_array[j]);
+                fd_array_delete(self->fd_index_array[i].fd_array[j]);
             }
         }
     }
