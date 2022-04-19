@@ -1,0 +1,16 @@
+digraph dentry{
+    rankdir="RL"
+    content[
+        shape="record"
+        label="atomic_llong ref_count\l|
+        struct inode *d_inode\l|
+        ino_t d_ino\l|
+        struct dentry *father\l|
+        struct dentry_list sub_list\l|
+        struct dentry_list *fa_sub_list\l|
+        struct dentry_hash_key hash_key\l|
+        char name[DENTRY_NAME_MAX_LEN]\l"
+    ]
+    content
+
+}

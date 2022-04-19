@@ -1,0 +1,15 @@
+digraph hash_table{    
+    rankdir="RL"
+    content[
+        shape="record"
+        label="<p0>struct hash_bucket_node *bucket_array\l|
+        struct hash_table_common_operation *op\l"
+    ]
+    hash_bucket_node[
+        shape="record"
+        label=" void *value[BUCKET_ENTRY_NUMBER]\l|
+        atomic_bucket_node_ptr next\l"
+    ]
+    content:p0 -> hash_bucket_node
+
+}

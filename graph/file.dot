@@ -1,0 +1,12 @@
+digraph file{    
+    rankdir="RL"
+    content[
+        shape="record"
+        label="struct dentry *dentry\l|
+        off_t offset\l|
+        mode_t mode\l|
+        other metadata...\l"
+    ]
+    content
+
+}
