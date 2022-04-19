@@ -2,38 +2,48 @@
 #include <stdatomic.h>
 #include <malloc.h>
 
-typedef _Atomic(struct hash_bucket_node*) atomic_bucket_node_ptr;
+typedef struct hash_bucket_node hash_bucket_node;
+typedef _Atomic(hash_bucket_node*) atomic_bucket_node_ptr;
 
 #define CACHE_LINE_SIZE 64
 #define BUCKET_ENTRY_NUMBER (CACHE_LINE_SIZE - sizeof(atomic_bucket_node_ptr)) / sizeof(void*)
-
-// maybe a larger prime number...
-#define HASH_TABLE_BUCKET_NUMBER 101
 
 struct hash_bucket_node {
     void *value[BUCKET_ENTRY_NUMBER];
     atomic_bucket_node_ptr next;
 };
 
-static struct hash_bucket_node *alloc_bucket_node() 
+
+static hash_bucket_node *alloc_bucket_node() 
 {
     // 之后可能不用malloc，自己管理缓存池
-    return memalign(CACHE_LINE_SIZE, sizeof(struct hash_bucket_node));
+    return memalign(CACHE_LINE_SIZE, sizeof(hash_bucket_node));
 }
 
-static void free_bucket_node(struct hash_bucket_node *self) 
+static void free_bucket_node(hash_bucket_node *self) 
 {
     // 之后可能不用malloc，此处也不调free
     free(self);
 }
 
-static void bucket_node_init(struct hash_bucket_node *self) 
+static hash_bucket_node* alloc_bucket_array(size_t sz)
+{
+    return (hash_bucket_node*)memalign(CACHE_LINE_SIZE, sizeof(hash_bucket_node) * sz);
+}
+
+static void free_bucket_array(hash_bucket_node *bucket_array)
+{
+    free(bucket_array);
+}
+
+
+static void bucket_node_init(hash_bucket_node *self) 
 {
     atomic_store(&self->next, NULL);
     for (int i = 0; i < BUCKET_ENTRY_NUMBER; ++i) self->value[i] = NULL;
 }
 
-static int bucket_node_get_next_used_entry(struct hash_bucket_node *self, int *entry) 
+static int bucket_node_get_next_used_entry(hash_bucket_node *self, int *entry) 
 {
     int index = *entry + 1;
     for (; index < BUCKET_ENTRY_NUMBER; ++index)
@@ -42,7 +52,7 @@ static int bucket_node_get_next_used_entry(struct hash_bucket_node *self, int *e
     return index == BUCKET_ENTRY_NUMBER ? -1 : 0;
 }
 
-static int bucket_node_get_unused_entry(struct hash_bucket_node *self) 
+static int bucket_node_get_unused_entry(hash_bucket_node *self) 
 {
     int entry = 0;
     for (; entry < BUCKET_ENTRY_NUMBER; ++entry)
@@ -50,7 +60,15 @@ static int bucket_node_get_unused_entry(struct hash_bucket_node *self)
     return entry == BUCKET_ENTRY_NUMBER ? -1 : entry;
 }
 
-static inline void bucket_node_set_entry(struct hash_bucket_node *self, int entry, void *value) 
+static void bucket_node_call_func_on_every_entry(hash_bucket_node *self, void(*func)(void*))
+{
+    int entry = 0;
+    for (; entry < BUCKET_ENTRY_NUMBER; ++entry)
+        if (!IS_NULL_PTR(self->value[entry]))
+            func(self->value[entry]);
+}
+
+static inline void bucket_node_set_entry(hash_bucket_node *self, int entry, void *value) 
 {
     self->value[entry] = value;
 }
@@ -60,58 +78,87 @@ static inline void bucket_node_clear_entry(unsigned long entry_ptr)
     *(void**)entry_ptr = NULL;
 }
 
-static inline struct hash_bucket_node* bucket_node_get_next_ptr(struct hash_bucket_node *self) 
+static inline hash_bucket_node* bucket_node_get_next_ptr(hash_bucket_node *self) 
 {
     unsigned long mask_high_bit = ~(1UL << 63);
-    return (struct hash_bucket_node*)((unsigned long)self->next & mask_high_bit);
+    return (hash_bucket_node*)((unsigned long)self->next & mask_high_bit);
 }
 
-int hash_table_init(struct hash_table *self, struct hash_table_common_operation *op)
+
+int hash_table_init(hash_table *self, size_t sz, hash_table_common_operation *op)
 {
-    self->bucket_array = memalign(CACHE_LINE_SIZE, sizeof(struct hash_bucket_node) * HASH_TABLE_BUCKET_NUMBER);
+    self->bucket_array = alloc_bucket_array(sz);
     self->op = op;
+    self->bucket_array_size = sz;
     if (self->bucket_array == NULL)
         return alloc_fail;
-    for (int i = 0; i < HASH_TABLE_BUCKET_NUMBER; ++i)
+    for (int i = 0; i < sz; ++i)
         bucket_node_init(&self->bucket_array[i]);
     return 0;
 }
 
-void hash_table_destroy(struct hash_table *self)
+static void hash_table_destroy_without_release_instance(hash_table *self)
 {
-    for (int i = 0; i < BUCKET_ENTRY_NUMBER; ++i)
+    for (size_t i = 0; i < self->bucket_array_size; ++i)
     {
-        struct hash_bucket_node *node = bucket_node_get_next_ptr(&self->bucket_array[i]);
+        hash_bucket_node *node = bucket_node_get_next_ptr(&self->bucket_array[i]);
         while (node != NULL)
         {
-            struct hash_bucket_node *next = bucket_node_get_next_ptr(node);
+            hash_bucket_node *next = bucket_node_get_next_ptr(node);
             free_bucket_node(node);
             node = next;
         }
     }
     
-    free(self->bucket_array);
+    free_bucket_array(self->bucket_array);   
 }
 
-static void hash_bucket_lock(struct hash_bucket_node *self) 
+void hash_table_destroy(hash_table *self, void(*release_instance)(void*))
+{
+    if (release_instance == NULL)
+    {
+        hash_table_destroy_without_release_instance(self);
+        return;
+    }
+    
+    for (size_t i = 0; i < self->bucket_array_size; ++i)
+    {
+        bucket_node_call_func_on_every_entry(&self->bucket_array[i], release_instance);
+
+        hash_bucket_node *node = bucket_node_get_next_ptr(&self->bucket_array[i]);
+        while (node != NULL)
+        {
+            hash_bucket_node *next = bucket_node_get_next_ptr(node);
+            bucket_node_call_func_on_every_entry(node, release_instance);
+            free_bucket_node(node);
+            node = next;
+        }
+    }
+    
+    free_bucket_array(self->bucket_array);
+}
+
+
+static void hash_bucket_lock(hash_bucket_node *self) 
 {
     unsigned long high_bit = 1UL << 63;
     for (;;) 
     {
         unsigned long expect = (unsigned long)atomic_load(&self->next) & (~high_bit);
         unsigned long target = (unsigned long)expect | high_bit;
-        if (atomic_compare_exchange_weak(&self->next, (struct hash_bucket_node**)&expect, (struct hash_bucket_node*)target)) 
+        if (atomic_compare_exchange_weak(&self->next, (hash_bucket_node**)&expect, (hash_bucket_node*)target)) 
             break;
     }
 }
 
-static void hash_bucket_unlock(struct hash_bucket_node *self) 
+static void hash_bucket_unlock(hash_bucket_node *self) 
 {
     ptrdiff_t mask_high_bit = ~(1UL << 63);
     atomic_fetch_and(&self->next, mask_high_bit);
 }
 
-static void hash_bucket_insert_node(struct hash_bucket_node *self, struct hash_bucket_node *node) 
+
+static void hash_bucket_insert_node(hash_bucket_node *self, hash_bucket_node *node) 
 {
     unsigned long high_bit = ((unsigned long)self->next >> 63) << 63;
     unsigned long mask_high_bit = ~(1UL << 63);
@@ -120,10 +167,10 @@ static void hash_bucket_insert_node(struct hash_bucket_node *self, struct hash_b
     self->next = (atomic_bucket_node_ptr)((unsigned long)self->next | high_bit);
 }
 
-static void *hash_bucket_lookup_value(struct hash_table *self, size_t index, void *key, unsigned long *pvalue) 
+static void *hash_bucket_lookup_value(hash_table *self, size_t index, void *key, unsigned long *pvalue) 
 {
     void *result = NULL;
-    struct hash_bucket_node *node = &self->bucket_array[index];
+    hash_bucket_node *node = &self->bucket_array[index];
 
     int entry = -1;
     while (node != NULL)  // 遍历冲突链中所有的BucketNode
@@ -149,9 +196,9 @@ static void *hash_bucket_lookup_value(struct hash_table *self, size_t index, voi
     return result;
 }
 
-static int hash_bucket_insert_value(struct hash_table *self, size_t index, void *value, unsigned long *pvalue) 
+static int hash_bucket_insert_value(hash_table *self, size_t index, void *value, unsigned long *pvalue) 
 {
-    struct hash_bucket_node *node = &self->bucket_array[index];
+    hash_bucket_node *node = &self->bucket_array[index];
     for (;;) 
     {
         int entry = bucket_node_get_unused_entry(node);
@@ -174,9 +221,9 @@ static int hash_bucket_insert_value(struct hash_table *self, size_t index, void 
     return 0;
 }
 
-void* hash_table_lookup(struct hash_table *self, void *key, void(*get_instance)(void*)) 
+void* hash_table_lookup(hash_table *self, void *key, void(*get_instance)(void*)) 
 {
-    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+    size_t index = self->op->hash(key) % self->bucket_array_size;
     hash_bucket_lock(&self->bucket_array[index]);
 
     void *result = hash_bucket_lookup_value(self, index, key, NULL);
@@ -187,9 +234,9 @@ void* hash_table_lookup(struct hash_table *self, void *key, void(*get_instance)(
     return result;
 }
 
-void* hash_table_lookup_no_lock(struct hash_table *self, void *key, void(*get_instance)(void*))
+void* hash_table_lookup_no_lock(hash_table *self, void *key, void(*get_instance)(void*))
 {
-    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+    size_t index = self->op->hash(key) % self->bucket_array_size;
     
     void *result = hash_bucket_lookup_value(self, index, key, NULL);
     if (result != NULL && get_instance != NULL)
@@ -198,10 +245,10 @@ void* hash_table_lookup_no_lock(struct hash_table *self, void *key, void(*get_in
     return result;
 }
 
-int hash_table_insert(struct hash_table *self, void *value, void(*get_instance)(void*))
+int hash_table_insert(hash_table *self, void *value, void(*get_instance)(void*))
 {
     void *key = self->op->get_hash_key(value);
-    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+    size_t index = self->op->hash(key) % self->bucket_array_size;
 
     hash_bucket_lock(&self->bucket_array[index]);
 
@@ -222,10 +269,10 @@ int hash_table_insert(struct hash_table *self, void *value, void(*get_instance)(
     return result;
 }
 
-int hash_table_insert_no_lock(struct hash_table *self, void *value, void(*get_instance)(void*))
+int hash_table_insert_no_lock(hash_table *self, void *value, void(*get_instance)(void*))
 {
     void *key = self->op->get_hash_key(value);
-    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+    size_t index = self->op->hash(key) % self->bucket_array_size;
 
     void *res = hash_bucket_lookup_value(self, index, key, NULL);
     if (res != NULL)
@@ -238,9 +285,9 @@ int hash_table_insert_no_lock(struct hash_table *self, void *value, void(*get_in
     return result;
 }
 
-int hash_table_remove_use_key(struct hash_table *self, void *key, void(*release_instance)(void*))
+int hash_table_remove_use_key(hash_table *self, void *key, void(*release_instance)(void*))
 {
-    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+    size_t index = self->op->hash(key) % self->bucket_array_size;
     hash_bucket_lock(&self->bucket_array[index]);
 
     unsigned long pvalue;
@@ -259,9 +306,9 @@ int hash_table_remove_use_key(struct hash_table *self, void *key, void(*release_
     return 0;
 }
 
-int hash_table_remove_use_key_no_lock(struct hash_table *self, void *key, void(*release_instance)(void*))
+int hash_table_remove_use_key_no_lock(hash_table *self, void *key, void(*release_instance)(void*))
 {
-    size_t index = self->op->hash(key) % HASH_TABLE_BUCKET_NUMBER;
+    size_t index = self->op->hash(key) % self->bucket_array_size;
 
     unsigned long pvalue;
     void *result = hash_bucket_lookup_value(self, index, key, &pvalue);
@@ -279,12 +326,12 @@ int hash_table_remove_use_key_no_lock(struct hash_table *self, void *key, void(*
 // -------------------------------------------------------------------------
 // debug used
 
-size_t hash_table_bucket_count_member(struct hash_table *self, size_t index)
+size_t hash_table_bucket_count_member(hash_table *self, size_t index)
 {
     hash_bucket_lock(&self->bucket_array[index]);
 
     size_t result = 0;
-    struct hash_bucket_node *node = &self->bucket_array[index];
+    hash_bucket_node *node = &self->bucket_array[index];
 
     while (node != NULL)
     {
@@ -299,12 +346,12 @@ size_t hash_table_bucket_count_member(struct hash_table *self, size_t index)
     return result;
 }
 
-size_t hash_table_bucket_count_node(struct hash_table *self, size_t index)
+size_t hash_table_bucket_count_node(hash_table *self, size_t index)
 {
     hash_bucket_lock(&self->bucket_array[index]);
 
     size_t result = 0;
-    struct hash_bucket_node *node = &self->bucket_array[index];
+    hash_bucket_node *node = &self->bucket_array[index];
 
     while (node != NULL)
     {
