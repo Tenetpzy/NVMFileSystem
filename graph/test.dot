@@ -1,0 +1,31 @@
+digraph G {
+    rankdir="RL"
+    value1 [
+        shape="circle"
+        label="value1"
+    ]
+    value2 [
+        shape="circle"
+        label="value2"
+    ]
+    item1 [
+        shape="record"
+        label="item1|
+            <f0> *next : struct item\l|
+            <f1> *prev : struct item\l|
+            <f2> *data : void* \l"
+    ]
+    item2 [
+        shape="record"
+        label="item2|
+            <f0> *next : struct item\l|
+            <f1> *prev : struct item\l|
+            <f2> *data : void* \l"
+    ]
+    item1:f1 -> null
+    item1:f0 -> item2
+    item1:f2 -> value1
+    item2:f1 -> item1
+    item2:f0 -> null
+    item2:f2 -> value2
+}

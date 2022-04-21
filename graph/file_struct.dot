@@ -1,0 +1,20 @@
+digraph file_struct{
+    rankdir="RL"
+    content [
+        shape="record"
+        label="<p0>struct L1_struct *L1"
+    ]
+    L1_struct [
+        shape="record"
+        label="bitset_t bitset\l|
+        <p0>struct L2_struct *L2"
+    ]
+    L2_struct [
+        shape="record"
+        label="counter_t counter\l|
+        bitset_t bitset\l|
+        struct file* files[MAXFILE]\l"
+    ]
+    content:p0 -> L1_struct
+    L1_struct:p0->L2_struct
+}
